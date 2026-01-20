@@ -8,10 +8,15 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         .slider { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 5px; background: #d3d3d3; outline: none; }
-        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; cursor: pointer; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; cursor: pointer; border: 2px solid white; }
+        .winner-banner { transition: all 0.3s ease; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans">
+
+    <div id="winner-container" class="winner-banner w-full py-6 text-center shadow-lg mb-4">
+        <h1 id="winner-text" class="text-4xl font-black uppercase tracking-widest text-white">A calcular resultados...</h1>
+    </div>
 
     <div class="sticky top-0 z-50 bg-white shadow-md p-4 mb-8">
         <div class="max-w-6xl mx-auto flex flex-wrap justify-around items-center gap-4">
@@ -35,12 +40,12 @@
     </div>
 
     <main class="max-w-6xl mx-auto px-4 pb-20">
-        <h1 class="text-2xl font-bold mb-6 text-center">Simulador de Transferência de Voto</h1>
+        <h2 class="text-xl font-semibold mb-6 text-center text-gray-600">Ajuste a transferência de voto de cada candidato</h2>
         
         <div id="controls-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             </div>
 
-        <div class="mt-12 bg-white p-6 rounded-xl shadow-sm">
+        <div class="mt-12 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h2 class="text-xl font-bold mb-4">Fluxo de Votos (Sankey)</h2>
             <div id="sankey-chart" style="width:100%; height:600px;"></div>
         </div>
@@ -49,28 +54,30 @@
     <script>
         const inscritosTotais = 11018835;
 
-        // Dados da 1ª Volta
-        const candidatos = [
-            { id: 'seguro', nome: 'A. J. Seguro', votos: 1754919, cor: '#FFB6C1', defaultSeguro: 100 },
-            { id: 'ventura', nome: 'André Ventura', votos: 1326657, cor: '#000000', defaultSeguro: 0 },
-            { id: 'cotrim', nome: 'Cotrim Figueiredo', votos: 902591, cor: '#87CEEB', defaultSeguro: 50 },
-            { id: 'gouveia', nome: 'Gouveia e Melo', votos: 695093, cor: '#4B5320', defaultSeguro: 50 },
-            { id: 'mendes', nome: 'Marques Mendes', votos: 637399, cor: '#FF8C00', defaultSeguro: 50 },
-            { id: 'catarina', nome: 'Catarina Martins', votos: 116305, cor: '#8B0000', defaultSeguro: 90 },
-            { id: 'filipe', nome: 'António Filipe', votos: 92589, cor: '#FF0000', defaultSeguro: 90 },
-            { id: 'vieira', nome: 'Manuel J. Vieira', votos: 60899, cor: '#FFFF00', defaultSeguro: 50 },
-            { id: 'pinto', nome: 'Jorge Pinto', votos: 38536, cor: '#90EE90', defaultSeguro: 70 },
-            { id: 'pestana', nome: 'André Pestana', votos: 10893, cor: '#DC143C', defaultSeguro: 80 },
-            { id: 'correia', nome: 'Humberto Correia', votos: 4622, cor: '#808080', defaultSeguro: 50 },
-            { id: 'abstencao1', nome: 'Abst./Brancos/Nulos', votos: 5378332, cor: '#D1D5DB', defaultSeguro: 0, defaultAbst: 100 }
+        // Dados da 1ª Volta (Ordenados por relevância)
+        let candidatos = [
+            { id: 'seguro', nome: 'A. J. Seguro', votos: 1754919, cor: '#FFB6C1', defaultVentura: 0, defaultAbst: 0 },
+            { id: 'ventura', nome: 'André Ventura', votos: 1326657, cor: '#1a1a1a', defaultVentura: 100, defaultAbst: 0 },
+            { id: 'cotrim', nome: 'Cotrim Figueiredo', votos: 902591, cor: '#87CEEB', defaultVentura: 50, defaultAbst: 15 },
+            { id: 'gouveia', nome: 'Gouveia e Melo', votos: 695093, cor: '#4B5320', defaultVentura: 50, defaultAbst: 20 },
+            { id: 'mendes', nome: 'Marques Mendes', votos: 637399, cor: '#FF8C00', defaultVentura: 40, defaultAbst: 20 },
+            { id: 'catarina', nome: 'Catarina Martins', votos: 116305, cor: '#8B0000', defaultVentura: 5, defaultAbst: 30 },
+            { id: 'filipe', nome: 'António Filipe', votos: 92589, cor: '#FF0000', defaultVentura: 5, defaultAbst: 35 },
+            { id: 'vieira', nome: 'Manuel J. Vieira', votos: 60899, cor: '#EAB308', defaultVentura: 50, defaultAbst: 40 },
+            { id: 'pinto', nome: 'Jorge Pinto', votos: 38536, cor: '#22C55E', defaultVentura: 10, defaultAbst: 30 },
+            { id: 'pestana', nome: 'André Pestana', votos: 10893, cor: '#DC143C', defaultVentura: 15, defaultAbst: 40 },
+            { id: 'correia', nome: 'Humberto Correia', votos: 4622, cor: '#808080', defaultVentura: 50, defaultAbst: 50 },
+            { id: 'abstencao1', nome: 'Abst./Brancos/Nulos 1ªV', votos: 5378332, cor: '#D1D5DB', defaultVentura: 50, defaultAbst: 90 }
         ];
 
-        // Estado inicial
+        // Ordenar por votos
+        candidatos.sort((a, b) => b.votos - a.votos);
+
         let state = {};
         candidatos.forEach(c => {
             state[c.id] = {
-                abstencao: c.defaultAbst !== undefined ? c.defaultAbst : 10,
-                seguroVsVentura: c.defaultSeguro // 100 = Tudo Seguro, 0 = Tudo Ventura
+                abstencao: c.defaultAbst,
+                ventura: c.defaultVentura // 0 = 100% Seguro, 100 = 100% Ventura
             };
         });
 
@@ -82,12 +89,15 @@
                 card.style.borderColor = c.cor;
                 
                 card.innerHTML = `
-                    <h3 class="font-bold text-lg mb-2">${c.nome} <span class="text-xs font-normal text-gray-500">(${c.votos.toLocaleString()} votos)</span></h3>
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-bold text-gray-800">${c.nome}</h3>
+                        <span class="text-[10px] bg-gray-100 px-2 py-1 rounded text-gray-500">${c.votos.toLocaleString()} votos</span>
+                    </div>
                     
                     <div class="mb-4">
-                        <div class="flex justify-between text-xs mb-1">
-                            <span>Votantes 2ªV</span>
-                            <span>Abstenção</span>
+                        <div class="flex justify-between text-[10px] uppercase font-bold text-gray-400 mb-1">
+                            <span>Vota 2ªV: <span id="perc-vota-${c.id}">0</span>%</span>
+                            <span>Abstenção: <span id="perc-abst-${c.id}">0</span>%</span>
                         </div>
                         <input type="range" class="slider w-full" 
                             value="${100 - state[c.id].abstencao}" 
@@ -95,14 +105,14 @@
                     </div>
 
                     <div>
-                        <div class="flex justify-between text-xs mb-1">
-                            <span class="text-pink-600 font-bold">Seguro</span>
-                            <span class="text-black font-bold">Ventura</span>
+                        <div class="flex justify-between text-[10px] uppercase font-bold mb-1">
+                            <span class="text-pink-500">Seguro: <span id="perc-seguro-${c.id}">0</span>%</span>
+                            <span class="text-black">Ventura: <span id="perc-ventura-${c.id}">0</span>%</span>
                         </div>
                         <input type="range" class="slider w-full" 
                             style="background: linear-gradient(to right, #FFB6C1, #000)"
-                            value="${state[c.id].seguroVsVentura}" 
-                            oninput="updateState('${c.id}', 'seguroVsVentura', this.value)">
+                            value="${state[c.id].ventura}" 
+                            oninput="updateState('${c.id}', 'ventura', this.value)">
                     </div>
                 `;
                 grid.appendChild(card);
@@ -125,36 +135,47 @@
                 sources: [],
                 targets: [],
                 values: [],
-                colors: [...candidatos.map(c => c.cor), "#F472B6", "#000000", "#9CA3AF"]
+                nodeColors: [...candidatos.map(c => c.cor), "#F472B6", "#1a1a1a", "#9CA3AF"],
+                linkColors: []
             };
 
             candidatos.forEach((c, index) => {
                 const s = state[c.id];
                 const v_abstencao = (s.abstencao / 100) * c.votos;
                 const v_restantes = c.votos - v_abstencao;
-                const v_seguro = (s.seguroVsVentura / 100) * v_restantes;
-                const v_ventura = v_restantes - v_seguro;
+                const v_ventura = (s.ventura / 100) * v_restantes;
+                const v_seguro = v_restantes - v_ventura;
 
                 totalSeguro += v_seguro;
                 totalVentura += v_ventura;
                 totalAbstencao2V += v_abstencao;
 
-                // Para o Sankey (Index Seguro: length, Ventura: length+1, Abst: length+2)
+                // Atualizar labels de percentagem no UI
+                document.getElementById(`perc-abst-${c.id}`).innerText = Math.round(s.abstencao);
+                document.getElementById(`perc-vota-${c.id}`).innerText = Math.round(100 - s.abstencao);
+                document.getElementById(`perc-seguro-${c.id}`).innerText = Math.round(100 - s.ventura);
+                document.getElementById(`perc-ventura-${c.id}`).innerText = Math.round(s.ventura);
+
                 const baseIdx = candidatos.length;
+                const linkAlpha = "88"; // Hex para transparência
+
                 if (v_seguro > 0) {
                     sankeyData.sources.push(index);
                     sankeyData.targets.push(baseIdx);
                     sankeyData.values.push(v_seguro);
+                    sankeyData.linkColors.push(c.cor + linkAlpha);
                 }
                 if (v_ventura > 0) {
                     sankeyData.sources.push(index);
                     sankeyData.targets.push(baseIdx + 1);
                     sankeyData.values.push(v_ventura);
+                    sankeyData.linkColors.push(c.cor + linkAlpha);
                 }
                 if (v_abstencao > 0) {
                     sankeyData.sources.push(index);
                     sankeyData.targets.push(baseIdx + 2);
                     sankeyData.values.push(v_abstencao);
+                    sankeyData.linkColors.push(c.cor + linkAlpha);
                 }
             });
 
@@ -163,11 +184,23 @@
             const percVentura = (totalVentura / totalVotosValidos) * 100;
             const percAbst2V = (totalAbstencao2V / inscritosTotais) * 100;
 
+            // Atualizar Totais
             document.getElementById('res-seguro').innerText = `${percSeguro.toFixed(2)}%`;
             document.getElementById('votos-seguro').innerText = `${Math.round(totalSeguro).toLocaleString()} votos`;
             document.getElementById('res-ventura').innerText = `${percVentura.toFixed(2)}%`;
             document.getElementById('votos-ventura').innerText = `${Math.round(totalVentura).toLocaleString()} votos`;
             document.getElementById('res-abstencao').innerText = `${percAbst2V.toFixed(2)}%`;
+
+            // Atualizar Banner do Vencedor
+            const winText = document.getElementById('winner-text');
+            const winCont = document.getElementById('winner-container');
+            if (percSeguro > percVentura) {
+                winText.innerText = `António José Seguro vence (${percSeguro.toFixed(1)}%)`;
+                winCont.className = "winner-banner w-full py-6 text-center shadow-lg mb-4 bg-pink-500";
+            } else {
+                winText.innerText = `André Ventura vence (${percVentura.toFixed(1)}%)`;
+                winCont.className = "winner-banner w-full py-6 text-center shadow-lg mb-4 bg-black";
+            }
 
             drawSankey(sankeyData);
         }
@@ -181,21 +214,22 @@
                     thickness: 30,
                     line: { color: "black", width: 0.5 },
                     label: data.labels,
-                    color: data.colors
+                    color: data.nodeColors
                 },
                 link: {
                     source: data.sources,
                     target: data.targets,
-                    value: data.values
+                    value: data.values,
+                    color: data.linkColors
                 }
             };
 
             const layout = {
-                font: { size: 12 },
-                margin: { l: 0, r: 0, t: 20, b: 20 }
+                font: { size: 11 },
+                margin: { l: 0, r: 0, t: 30, b: 30 }
             };
 
-            Plotly.newPlot('sankey-chart', [trace], layout);
+            Plotly.newPlot('sankey-chart', [trace], layout, {responsive: true});
         }
 
         initUI();
