@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador 2ª Volta - Presidenciais</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .slider { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 5px; background: #d3d3d3; outline: none; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; cursor: pointer; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+
+    <div class="sticky top-0 z-50 bg-white shadow-md p-4 mb-8">
+        <div class="max-w-6xl mx-auto flex flex-wrap justify-around items-center gap-4">
+            <div class="text-center">
+                <p class="text-sm font-bold uppercase text-gray-500">António José Seguro</p>
+                <p id="res-seguro" class="text-3xl font-black text-pink-500">0%</p>
+                <p id="votos-seguro" class="text-xs text-gray-400">0 votos</p>
+            </div>
+            <div class="h-12 w-px bg-gray-200 hidden md:block"></div>
+            <div class="text-center">
+                <p class="text-sm font-bold uppercase text-gray-500">André Ventura</p>
+                <p id="res-ventura" class="text-3xl font-black text-black">0%</p>
+                <p id="votos-ventura" class="text-xs text-gray-400">0 votos</p>
+            </div>
+            <div class="h-12 w-px bg-gray-200 hidden md:block"></div>
+            <div class="text-center">
+                <p class="text-sm font-bold uppercase text-gray-500">Abstenção Total (2ªV)</p>
+                <p id="res-abstencao" class="text-3xl font-black text-gray-400">0%</p>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-6xl mx-auto px-4 pb-20">
+        <h1 class="text-2xl font-bold mb-6 text-center">Simulador de Transferência de Voto</h1>
+        
+        <div id="controls-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+
+        <div class="mt-12 bg-white p-6 rounded-xl shadow-sm">
+            <h2 class="text-xl font-bold mb-4">Fluxo de Votos (Sankey)</h2>
+            <div id="sankey-chart" style="width:100%; height:600px;"></div>
+        </div>
+    </main>
+
+    <script>
+        const inscritosTotais = 11018835;
+
+        // Dados da 1ª Volta
+        const candidatos = [
+            { id: 'seguro', nome: 'A. J. Seguro', votos: 1754919, cor: '#FFB6C1', defaultSeguro: 100 },
+            { id: 'ventura', nome: 'André Ventura', votos: 1326657, cor: '#000000', defaultSeguro: 0 },
+            { id: 'cotrim', nome: 'Cotrim Figueiredo', votos: 902591, cor: '#87CEEB', defaultSeguro: 50 },
+            { id: 'gouveia', nome: 'Gouveia e Melo', votos: 695093, cor: '#4B5320', defaultSeguro: 50 },
+            { id: 'mendes', nome: 'Marques Mendes', votos: 637399, cor: '#FF8C00', defaultSeguro: 50 },
+            { id: 'catarina', nome: 'Catarina Martins', votos: 116305, cor: '#8B0000', defaultSeguro: 90 },
+            { id: 'filipe', nome: 'António Filipe', votos: 92589, cor: '#FF0000', defaultSeguro: 90 },
+            { id: 'vieira', nome: 'Manuel J. Vieira', votos: 60899, cor: '#FFFF00', defaultSeguro: 50 },
+            { id: 'pinto', nome: 'Jorge Pinto', votos: 38536, cor: '#90EE90', defaultSeguro: 70 },
+            { id: 'pestana', nome: 'André Pestana', votos: 10893, cor: '#DC143C', defaultSeguro: 80 },
+            { id: 'correia', nome: 'Humberto Correia', votos: 4622, cor: '#808080', defaultSeguro: 50 },
+            { id: 'abstencao1', nome: 'Abst./Brancos/Nulos', votos: 5378332, cor: '#D1D5DB', defaultSeguro: 0, defaultAbst: 100 }
+        ];
+
+        // Estado inicial
+        let state = {};
+        candidatos.forEach(c => {
+            state[c.id] = {
+                abstencao: c.defaultAbst !== undefined ? c.defaultAbst : 10,
+                seguroVsVentura: c.defaultSeguro // 100 = Tudo Seguro, 0 = Tudo Ventura
+            };
+        });
+
+        function initUI() {
+            const grid = document.getElementById('controls-grid');
+            candidatos.forEach(c => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg shadow-sm border-t-4";
+                card.style.borderColor = c.cor;
+                
+                card.innerHTML = `
+                    <h3 class="font-bold text-lg mb-2">${c.nome} <span class="text-xs font-normal text-gray-500">(${c.votos.toLocaleString()} votos)</span></h3>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>Votantes 2ªV</span>
+                            <span>Abstenção</span>
+                        </div>
+                        <input type="range" class="slider w-full" 
+                            value="${100 - state[c.id].abstencao}" 
+                            oninput="updateState('${c.id}', 'abstencao', 100 - this.value)">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-pink-600 font-bold">Seguro</span>
+                            <span class="text-black font-bold">Ventura</span>
+                        </div>
+                        <input type="range" class="slider w-full" 
+                            style="background: linear-gradient(to right, #FFB6C1, #000)"
+                            value="${state[c.id].seguroVsVentura}" 
+                            oninput="updateState('${c.id}', 'seguroVsVentura', this.value)">
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            calculateResults();
+        }
+
+        window.updateState = (id, field, value) => {
+            state[id][field] = parseFloat(value);
+            calculateResults();
+        };
+
+        function calculateResults() {
+            let totalSeguro = 0;
+            let totalVentura = 0;
+            let totalAbstencao2V = 0;
+
+            const sankeyData = {
+                labels: [...candidatos.map(c => c.nome), "A. J. Seguro", "André Ventura", "Abstenção 2ªV"],
+                sources: [],
+                targets: [],
+                values: [],
+                colors: [...candidatos.map(c => c.cor), "#F472B6", "#000000", "#9CA3AF"]
+            };
+
+            candidatos.forEach((c, index) => {
+                const s = state[c.id];
+                const v_abstencao = (s.abstencao / 100) * c.votos;
+                const v_restantes = c.votos - v_abstencao;
+                const v_seguro = (s.seguroVsVentura / 100) * v_restantes;
+                const v_ventura = v_restantes - v_seguro;
+
+                totalSeguro += v_seguro;
+                totalVentura += v_ventura;
+                totalAbstencao2V += v_abstencao;
+
+                // Para o Sankey (Index Seguro: length, Ventura: length+1, Abst: length+2)
+                const baseIdx = candidatos.length;
+                if (v_seguro > 0) {
+                    sankeyData.sources.push(index);
+                    sankeyData.targets.push(baseIdx);
+                    sankeyData.values.push(v_seguro);
+                }
+                if (v_ventura > 0) {
+                    sankeyData.sources.push(index);
+                    sankeyData.targets.push(baseIdx + 1);
+                    sankeyData.values.push(v_ventura);
+                }
+                if (v_abstencao > 0) {
+                    sankeyData.sources.push(index);
+                    sankeyData.targets.push(baseIdx + 2);
+                    sankeyData.values.push(v_abstencao);
+                }
+            });
+
+            const totalVotosValidos = totalSeguro + totalVentura;
+            const percSeguro = (totalSeguro / totalVotosValidos) * 100;
+            const percVentura = (totalVentura / totalVotosValidos) * 100;
+            const percAbst2V = (totalAbstencao2V / inscritosTotais) * 100;
+
+            document.getElementById('res-seguro').innerText = `${percSeguro.toFixed(2)}%`;
+            document.getElementById('votos-seguro').innerText = `${Math.round(totalSeguro).toLocaleString()} votos`;
+            document.getElementById('res-ventura').innerText = `${percVentura.toFixed(2)}%`;
+            document.getElementById('votos-ventura').innerText = `${Math.round(totalVentura).toLocaleString()} votos`;
+            document.getElementById('res-abstencao').innerText = `${percAbst2V.toFixed(2)}%`;
+
+            drawSankey(sankeyData);
+        }
+
+        function drawSankey(data) {
+            const trace = {
+                type: "sankey",
+                orientation: "h",
+                node: {
+                    pad: 15,
+                    thickness: 30,
+                    line: { color: "black", width: 0.5 },
+                    label: data.labels,
+                    color: data.colors
+                },
+                link: {
+                    source: data.sources,
+                    target: data.targets,
+                    value: data.values
+                }
+            };
+
+            const layout = {
+                font: { size: 12 },
+                margin: { l: 0, r: 0, t: 20, b: 20 }
+            };
+
+            Plotly.newPlot('sankey-chart', [trace], layout);
+        }
+
+        initUI();
+    </script>
+</body>
+</html>
